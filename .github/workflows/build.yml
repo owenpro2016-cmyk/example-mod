@@ -1,47 +1,37 @@
-name: Build Mod
-
-on:
-  workflow_dispatch:
-  push:
-    branches:
-      - "**"
-
-jobs:
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        config:
-          - name: Android32
-            os: ubuntu-latest
-            target: Android32
-          - name: Android64
-            os: ubuntu-latest
-            target: Android64
-
-    name: ${{ matrix.config.name }}
-    runs-on: ${{ matrix.config.os }}
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build the mod
-        uses: geode-sdk/build-geode-mod@main
-        with:
-          combine: true
-          sdk: nightly
-          target: ${{ matrix.config.target }}
-
-  package:
-    name: Package builds
-    runs-on: ubuntu-latest
-    needs: ['build']
-
-    steps:
-      - uses: geode-sdk/build-geode-mod/combine@main
-        id: build
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Build Output
-          path: ${{ steps.build.outputs.build-output }}
+{
+	"geode": "5.0.0",
+	"gd": {
+		"win": "2.2081",
+		"android": "2.2081",
+		"mac": "2.2081",
+		"ios": "2.2081"
+	},
+	"version": "v1.1.0",
+	"id": "owenpro2016-cmyk".practice-click-assist",
+	"name": "Click Assist",
+	"developer": "owenpro2016",
+	"description": "Te avisa (o hace) el click en el momento ideal en todos los vehículos. En modo normal activa Safe Mode: el completado y el progreso no se guardan.",
+	"settings": {
+		"enabled": {
+			"type": "bool",
+			"name": "Activar",
+			"description": "En práctica funciona normal. En modo normal el Safe Mode es obligatorio: no se guarda completado ni progreso mientras esté activo.",
+			"default": true
+		},
+		"mode": {
+			"type": "string",
+			"name": "Modo",
+			"description": "Aviso = muestra CLICK! / HOLD / RELEASE. Auto = el mod hace el click por ti.",
+			"default": "Aviso",
+			"one-of": ["Aviso", "Auto"]
+		},
+		"correction": {
+			"type": "float",
+			"name": "Corrección (ms)",
+			"description": "Adelanta el click/aviso. Súbela en móvil si sientes que clickeas tarde (prueba 50 a 120).",
+			"default": 0,
+			"min": 0,
+			"max": 300
+		}
+	}
+}
