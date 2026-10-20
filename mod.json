@@ -6,11 +6,11 @@
 		"mac": "2.2081",
 		"ios": "2.2081"
 	},
-	"version": "v1.1.0",
+	"version": "v1.3.0",
 	"id": "owenpro2016-cmyk.click-assist",
 	"name": "Click Assist",
 	"developer": "owenpro2016-cmyk",
-	"description": "Te avisa (o hace) el click en el momento ideal en todos los vehículos. En modo normal activa Safe Mode: el completado y el progreso no se guardan.",
+	"description": "Corrige tus clicks tardíos: si clickeas hasta N frames tarde, te devuelve al momento ideal y aplica el click ahí. También avisa o clickea por ti, con pendientes y orbs. En modo normal activa Safe Mode: el completado y el progreso no se guardan.",
 	"settings": {
 		"enabled": {
 			"type": "bool",
@@ -21,17 +21,35 @@
 		"mode": {
 			"type": "string",
 			"name": "Modo",
-			"description": "Aviso = muestra CLICK! / HOLD / RELEASE. Auto = el mod hace el click por ti.",
-			"default": "Aviso",
-			"one-of": ["Aviso", "Auto"]
+			"description": "Corregir = solo corrige tus clicks tardíos. Aviso = además muestra CLICK! / HOLD / RELEASE. Auto = el mod clickea por ti.",
+			"default": "Corregir",
+			"one-of": [
+				"Corregir",
+				"Aviso",
+				"Auto"
+			]
+		},
+		"window": {
+			"type": "int",
+			"name": "Corrección de click (frames)",
+			"description": "Cuántos frames tarde puedes clickear y que el mod lo corrija (a 60 FPS). Si clickeas 2 frames tarde y tienes 2 o más, te lo corrige. 0 = apagado.",
+			"default": 4,
+			"min": 0,
+			"max": 30
 		},
 		"correction": {
 			"type": "float",
-			"name": "Corrección (ms)",
-			"description": "Adelanta el click/aviso. Súbela en móvil si sientes que clickeas tarde (prueba 50 a 120).",
+			"name": "Adelanto del momento ideal (ms)",
+			"description": "Adelanta el momento ideal y el aviso. Útil en móvil si notas lag al tocar (prueba 0 a 80).",
 			"default": 0,
 			"min": 0,
 			"max": 300
+		},
+		"orbs": {
+			"type": "bool",
+			"name": "Detectar orbs",
+			"description": "Hace/avisa el click al tocar un orb. Los pads no se manejan.",
+			"default": true
 		}
 	}
 }
