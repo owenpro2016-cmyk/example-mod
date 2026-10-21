@@ -510,3 +510,105 @@ public:
         if (veh != Veh::Ship && veh != Veh::Wave) {
             if (autoMode) {
                 if 
+                if (m_fields->cooldown <= 0.f) {
+                    int k = pick(0.f, m_fields->lastIdealKey);
+                    if (k >= 0) {
+                        m_fields->lastIdealKey = k;
+                        fire();
+                        return;
+                    }
+                }
+            } else {
+                if (showCue) {
+                    int kc = pick(kReaction, m_fields->lastCueKey);
+                    if (kc >= 0) {
+                        m_fields->lastCueKey = kc;
+                        this->flashCue("CLICK!");
+                    }
+                }
+                int ki = pick(0.f, m_fields->lastIdealKey);
+                if (ki >= 0) {
+                    m_fields->lastIdealKey = ki;
+                    armPress();
+                }
+            }
+            if (groundVeh) return;
+        }
+
+        // ---- Nave, UFO, wave, swing: seguir el centro del pasillo (con pendientes) ----
+        float D = ((veh == Veh::Wave) ? 70.f : 100.f) * rel;
+        float target;
+        if (corridorTarget(obs, px, py, D, target)) {
+            m_fields->holdY = target;
+            m_fields->hasHoldY = true;
+        } else {
+            if (!m_fields->hasHoldY) { m_fields->holdY = py; m_fields->hasHoldY = true; }
+            target = m_fields->holdY;
+        }
+
+        float horizon = (veh == Veh::Wave) ? corr : (0.10f + corr);
+        float pred = py + vy * horizon;
+        float errUp = up * (target - pred); // >0 = hay que subir (respecto a la gravedad)
+        float vyUp = up * vy;
+
+        if (veh == Veh::Ship || veh == Veh::Wave) {
+            float dz = (veh == Veh::Wave) ? 3.f : 8.f;
+            bool want = m_fields->desired;
+            if (errUp > dz) want = true;
+            else if (errUp < -dz) want = false;
+
+            if (want != m_fields->desired) {
+                m_fields->desired = want;
+                if (!autoMode) {
+                    if (want) armPress(); else armRelease();
+                }
+            }
+
+            if (autoMode) {
+                if (want != m_fields->held) { this->sendButton(want); m_fields->held = want; }
+            } else if (showCue) {
+                this->holdCue(want);
+            }
+            return;
+        }
+
+        // UFO y swing: toques con enfriamiento
+        this->hideCue();
+        if (m_fields->cooldown > 0.f) return;
+
+        bool tap = false;
+        float cd = 0.15f;
+        if (veh == Veh::Ufo) {
+            tap = errUp > 8.f && vyUp < 150.f;
+            cd = 0.18f;
+        } else { // Swing: cada click invierte la gravedad
+            tap = (vyUp < -20.f && errUp > 0.f) || (vyUp > 20.f && errUp < 0.f);
+            cd = 0.12f;
+        }
+        if (!tap) return;
+
+        if (autoMode) {
+            fire();
+        } else {
+            if (showCue) this->flashCue("CLICK!");
+            armPress();
+        }
+        m_fields->cooldown = cd;
+    }
+};
+
+// Intercepta TUS clicks antes de que el juego los procese
+class $modify(AssistBaseLayer, GJBaseGameLayer) {
+    void handleButton(bool down, int button, bool isPlayer1) {
+        if (button == static_cast<int>(PlayerButton::Jump) && isPlayer1) {
+            if (auto pl = PlayLayer::get()) {
+                if (static_cast<GJBaseGameLayer*>(pl) == this) {
+                    static_cast<AssistPlayLayer*>(pl)->onUserInput(down);
+                }
+            }
+        }
+        GJBaseGameLayer::handleButton(down, button, isPlayer1);
+    }
+};
+
+// FIN DE main.cpp
