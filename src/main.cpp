@@ -1,8 +1,9 @@
-// Click Assist v1.3
-// IDEA PRINCIPAL: corrección de clicks tardíos.
-//   El mod estima cuál era el momento ideal para clickear. Si clickeas hasta N frames
-//   tarde (ajuste "Corrección de click"), te devuelve al estado que tenías en ese momento
-//   ideal y aplica el click ahí, como si hubieras clickeado a tiempo.
+// Click Assist v1.4
+// IDEA PRINCIPAL: corrección de tus clicks.
+//   El mod estima cuál es el momento ideal para clickear.
+//   - Click TEMPRANO: si clickeas hasta N frames antes (ajuste "early"), el mod RETRASA
+//     el click hasta el momento ideal, para que pases el obstáculo.
+//   - Click TARDÍO (opcional, ajuste "window"): te devuelve al momento ideal y aplica el click ahí.
 // Extras: modo Aviso (muestra CLICK!), modo Auto (el mod clickea), pendientes, orbs.
 // SAFE MODE obligatorio: con el mod activo en modo normal no se guarda ni completado ni %.
 // Aproximado: no simula la física, no maneja pads, portales ni dual.
@@ -199,6 +200,13 @@ public:
         bool releaseArmed = false;
         float pressT = 0.f;
         float releaseT = 0.f;
+
+        // Retraso de clicks tempranos
+        bool pending = false;          // hay un click tuyo esperando el momento ideal
+        bool pendingRelease = false;   // soltaste el botón mientras esperaba
+        float pendingT = 0.f;
+        float noArmUntil = 0.f;
+        float lastVy = 0.f;
         PlayerCheckpoint* snapPress = nullptr;
         PlayerCheckpoint* snapRelease = nullptr;
 
@@ -250,36 +258,114 @@ public:
         m_fields->injecting = false;
     }
 
-    // ---------- CORRECCIÓN DE CLICKS TARDÍOS ----------
-    // Se llama cada vez que TÚ aprietas o sueltas el botón (antes de que el juego lo procese)
-    void onUserInput(bool down) {
-        if (m_fields->injecting) return;
-        m_fields->userDown = down;
+    // ---------- CORRECCIÓN DE TUS CLICKS ----------
+    // Segundos hasta el próximo momento ideal (si cae dentro de maxSec), o -1
+    float futureIdealDelay(float maxSec) {
+        auto p = m_player1;
+        if (!p || p->m_isDead) return -1.f;
+        Veh veh = vehicleOf(p);
+        if (veh == Veh::Ship || veh == Veh::Wave) return -1.f;
 
         auto mod = Mod::get();
-        if (!mod->getSettingValue<bool>("enabled")) return;
-        if (mod->getSettingValue<std::string>("mode") == "Auto") return;
-        int frames = static_cast<int>(mod->getSettingValue<int64_t>("window"));
-        if (frames <= 0) return;
-        float win = static_cast<float>(frames) / 60.f;
+        float corr = static_cast<float>(mod->getSettingValue<double>("correction")) / 1000.f;
+        bool canOrb = mod->getSettingValue<bool>("orbs");
+        float px = p->getPositionX();
+        float py = p->getPositionY();
+        float vy = m_fields->lastVy;
+        float rel = p->m_playerSpeed / 0.9f;
+        float ups = kBaseSpeed * rel;
+        float best = -1.f;
+
+        // Obstáculos (cubo, robot, bola, araña en el suelo)
+        if (isGroundVeh(veh) && p->m_isOnGround) {
+            float lead = leadFor(veh) * rel + corr * ups;
+            auto& v = m_fields->obs;
+            // si ya hay uno dentro del alcance, tu click ya va a tiempo: no se retrasa
+            if (findAhead(v, px, py, lead, -1) >= 0) return -1.f;
+            auto it = std::lower_bound(v.begin(), v.end(), px,
+                [](Ob const& o, float val) { return o.x0 < val; });
+            for (; it != v.end() && (it->x0 - px) <= lead + ups * maxSec; ++it) {
+                if (it->slope && !it->hazard) continue;
+                if (it->y1 < py - kLaneTol || it->y0 > py + kLaneTol) continue;
+                best = (it->x0 - px - lead) / ups;
+                break;
+            }
+        }
+
+        // Orbs
+        if (canOrb) {
+            float leadO = 24.f * rel + corr * ups;
+            auto& ov = m_fields->orbs;
+            auto it = std::lower_bound(ov.begin(), ov.end(), px,
+                [](Orb const& o, float val) { return o.x < val; });
+            for (; it != ov.end() && (it->x - px) <= leadO + ups * maxSec; ++it) {
+                float t = (it->x - px - leadO) / ups;
+                if (t <= 0.f) continue;
+                float pyPred = py + vy * t;
+                if (std::abs(it->y - pyPred) > 34.f) continue;
+                if (best < 0.f || t < best) best = t;
+                break;
+            }
+        }
+
+        if (best > 0.f && best <= maxSec) return best;
+        return -1.f;
+    }
+
+    // Se llama cada vez que TÚ aprietas o sueltas el botón (antes de que el juego lo procese).
+    // Devuelve true si ese click NO debe llegar al juego (porque el mod lo retrasa).
+    bool onUserInput(bool down) {
+        if (m_fields->injecting) return false;
+        m_fields->userDown = down;
+
+        // Si ya hay un click retrasado esperando, el resto de tus clicks se absorben
+        if (m_fields->pending) {
+            if (!down) m_fields->pendingRelease = true;
+            return true;
+        }
+
+        auto mod = Mod::get();
+        if (!mod->getSettingValue<bool>("enabled")) return false;
+        if (mod->getSettingValue<std::string>("mode") == "Auto") return false;
 
         auto p = m_player1;
-        if (!p || p->m_isDead) return;
+        if (!p || p->m_isDead) return false;
+
+        // 1) Click TEMPRANO: se retrasa hasta el momento ideal
+        int early = static_cast<int>(mod->getSettingValue<int64_t>("early"));
+        if (down && early > 0) {
+            float d = this->futureIdealDelay(static_cast<float>(early) / 60.f);
+            if (d > 0.f) {
+                m_fields->pending = true;
+                m_fields->pendingRelease = false;
+                m_fields->pendingT = m_fields->clock + d;
+                int f = std::max(1, static_cast<int>(std::lround(d * 60.f)));
+                std::string txt = "DELAYED +" + std::to_string(f) + "f";
+                this->flashCue(txt.c_str());
+                return true;
+            }
+        }
+
+        // 2) Click TARDÍO (opcional): volver al momento ideal y aplicar el click ahí
+        int frames = static_cast<int>(mod->getSettingValue<int64_t>("window"));
+        if (frames <= 0) return false;
+        float win = static_cast<float>(frames) / 60.f;
 
         bool& armed = down ? m_fields->pressArmed : m_fields->releaseArmed;
         float armT = down ? m_fields->pressT : m_fields->releaseT;
         auto snap = down ? m_fields->snapPress : m_fields->snapRelease;
-        if (!armed) return;
+        if (!armed) return false;
         armed = false;                       // un solo uso por momento ideal
 
         float late = m_fields->clock - armT; // cuánto te pasaste del momento ideal
-        if (late <= 0.f || late > win || !snap) return;
-        if (isGroundVeh(vehicleOf(p)) && !p->m_isOnGround) return;
+        if (late <= 0.f || late > win || !snap) return false;
+        if (isGroundVeh(vehicleOf(p)) && !p->m_isOnGround) return false;
 
         p->loadFromCheckpoint(snap);         // volver al estado del momento ideal
         int lateFrames = std::max(1, static_cast<int>(std::lround(late * 60.f)));
         std::string txt = "FIXED +" + std::to_string(lateFrames) + "f";
         this->flashCue(txt.c_str());
+        return false;
     }
 
     // >>> FIN DE LA PARTE 1: pega la PARTE 2 justo debajo de esta línea <<<
@@ -372,6 +458,8 @@ public:
         m_fields->assisted = false;
         m_fields->pressArmed = false;
         m_fields->releaseArmed = false;
+        m_fields->pending = false;
+        m_fields->pendingRelease = false;
         if (m_fields->cue) { m_fields->cue->stopAllActions(); m_fields->cue->setOpacity(0); }
         if (m_fields->safe) m_fields->safe->setOpacity(0);
     }
@@ -414,6 +502,15 @@ public:
         }
         if (m_fields->cooldown > 0.f) m_fields->cooldown -= dt;
 
+        // Click retrasado: se envía justo en el momento ideal
+        if (m_fields->pending && m_fields->clock >= m_fields->pendingT) {
+            m_fields->pending = false;
+            this->sendButton(true);
+            if (m_fields->pendingRelease) m_fields->releaseTimer = kHoldTime;
+            m_fields->noArmUntil = m_fields->clock + 0.25f;
+            m_fields->pressArmed = false;
+        }
+
         auto mod = Mod::get();
         if (!mod->getSettingValue<bool>("enabled")) {
             if (m_fields->held) { this->sendButton(false); m_fields->held = false; }
@@ -446,6 +543,7 @@ public:
         if (m_fields->hasLastPy) vy = (py - m_fields->lastPy) / std::max(dt, 0.0001f);
         m_fields->lastPy = py;
         m_fields->hasLastPy = true;
+        m_fields->lastVy = vy;
 
         float rel = p->m_playerSpeed / 0.9f; // 0.9 = velocidad 1x
         float ups = kBaseSpeed * rel;
@@ -460,6 +558,7 @@ public:
         // Guardar "foto" del jugador en el momento ideal (para corregir clicks tardíos)
         auto armPress = [&]() {
             if (autoMode || winFrames <= 0 || m_fields->userDown || !m_fields->snapPress) return;
+            if (m_fields->clock < m_fields->noArmUntil) return;
             p->saveToCheckpoint(m_fields->snapPress);
             m_fields->pressArmed = true;
             m_fields->pressT = m_fields->clock;
@@ -603,7 +702,7 @@ class $modify(AssistBaseLayer, GJBaseGameLayer) {
         if (button == static_cast<int>(PlayerButton::Jump) && isPlayer1) {
             if (auto pl = PlayLayer::get()) {
                 if (static_cast<GJBaseGameLayer*>(pl) == this) {
-                    static_cast<AssistPlayLayer*>(pl)->onUserInput(down);
+                    if (static_cast<AssistPlayLayer*>(pl)->onUserInput(down)) return;
                 }
             }
         }
