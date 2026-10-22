@@ -560,7 +560,7 @@ public:
             if (want != m_fields->desired) {
                 m_fields->desired = want;
                 if (!autoMode) {
-                    if (want) armPress(); else armRelease();
+                    if (want) armPress(); else armRelease();.
                 }
             }
 
@@ -587,7 +587,7 @@ public:
         }
         if (!tap) return;
 
-        if (autoMode) {
+        if (autoMode) { (m_fields->cooldown <= 0.f) {
             fire();
         } else {
             if (showCue) this->flashCue("CLICK!");
