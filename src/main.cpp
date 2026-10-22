@@ -282,6 +282,7 @@ public:
         this->flashCue(txt.c_str());
     }
 
+    // >>> FIN DE LA PARTE 1: pega la PARTE 2 justo debajo de esta línea <<<
     void setupHasCompleted() {
         PlayLayer::setupHasCompleted();
 
@@ -432,7 +433,7 @@ public:
         if (!p || p->m_isDead) return;
 
         std::string mode = mod->getSettingValue<std::string>("mode");
-        bool autoMode = (mode == "Auto"); 
+        bool autoMode = (mode == "Auto");
         bool showCue = (mode == "Aviso");
         int winFrames = static_cast<int>(mod->getSettingValue<int64_t>("window"));
         float corr = static_cast<float>(mod->getSettingValue<double>("correction")) / 1000.f;
@@ -509,7 +510,6 @@ public:
         // ---- Cubo/robot/bola/araña (obstáculos y orbs) y UFO/swing (orbs) ----
         if (veh != Veh::Ship && veh != Veh::Wave) {
             if (autoMode) {
-                if 
                 if (m_fields->cooldown <= 0.f) {
                     int k = pick(0.f, m_fields->lastIdealKey);
                     if (k >= 0) {
@@ -560,7 +560,7 @@ public:
             if (want != m_fields->desired) {
                 m_fields->desired = want;
                 if (!autoMode) {
-                    if (want) armPress(); else armRelease();.
+                    if (want) armPress(); else armRelease();
                 }
             }
 
@@ -587,7 +587,7 @@ public:
         }
         if (!tap) return;
 
-        if (autoMode) { (m_fields->cooldown <= 0.f) {
+        if (autoMode) {
             fire();
         } else {
             if (showCue) this->flashCue("CLICK!");
