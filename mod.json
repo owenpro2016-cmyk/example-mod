@@ -6,11 +6,11 @@
 		"mac": "2.2081",
 		"ios": "2.2081"
 	},
-	"version": "v1.3.0",
+	"version": "v1.4.0",
 	"id": "owenpro2016-cmyk.click-assist",
 	"name": "Click Assist",
 	"developer": "owenpro2016-cmyk",
-	"description": "Corrige tus clicks tardíos: si clickeas hasta N frames tarde, te devuelve al momento ideal y aplica el click ahí. También avisa o clickea por ti, con pendientes y orbs. En modo normal activa Safe Mode: el completado y el progreso no se guardan.",
+	"description": "Corrige tus clicks para practicar: si clickeas un poco antes, el mod retrasa el click hasta el momento ideal para que pases el obstáculo. También avisa o clickea por ti, con pendientes y orbs. En modo normal activa Safe Mode: el completado y el progreso no se guardan.",
 	"settings": {
 		"enabled": {
 			"type": "bool",
@@ -21,7 +21,7 @@
 		"mode": {
 			"type": "string",
 			"name": "Modo",
-			"description": "Corregir = solo corrige tus clicks tardíos. Aviso = además muestra CLICK! / HOLD / RELEASE. Auto = el mod clickea por ti.",
+			"description": "Corregir = solo corrige tus clicks. Aviso = además muestra CLICK! / HOLD / RELEASE. Auto = el mod clickea por ti.",
 			"default": "Corregir",
 			"one-of": [
 				"Corregir",
@@ -29,11 +29,11 @@
 				"Auto"
 			]
 		},
-		"window": {
+		"early": {
 			"type": "int",
-			"name": "Corrección de click (frames)",
-			"description": "Cuántos frames tarde puedes clickear y que el mod lo corrija (a 60 FPS). Si clickeas 2 frames tarde y tienes 2 o más, te lo corrige. 0 = apagado.",
-			"default": 4,
+			"name": "Retrasar clicks tempranos (frames)",
+			"description": "Si clickeas hasta este número de frames ANTES del momento ideal, el mod retrasa tu click hasta ese momento para que pases el obstáculo (a 60 FPS). 0 = apagado.",
+			"default": 6,
 			"min": 0,
 			"max": 30
 		},
@@ -50,6 +50,14 @@
 			"name": "Detectar orbs",
 			"description": "Hace/avisa el click al tocar un orb. Los pads no se manejan.",
 			"default": true
+		},
+		"window": {
+			"type": "int",
+			"name": "Rebobinar clicks tardíos (frames)",
+			"description": "Opcional. Si clickeas hasta este número de frames DESPUÉS del momento ideal, el mod te devuelve a ese momento y aplica el click ahí. 0 = apagado.",
+			"default": 0,
+			"min": 0,
+			"max": 30
 		}
 	}
 }
