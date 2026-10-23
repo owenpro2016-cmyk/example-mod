@@ -6,11 +6,11 @@
 		"mac": "2.2081",
 		"ios": "2.2081"
 	},
-	"version": "v1.4.0",
+	"version": "v1.5.0",
 	"id": "owenpro2016-cmyk.click-assist",
 	"name": "Click Assist",
 	"developer": "owenpro2016-cmyk",
-	"description": "Corrige tus clicks para practicar: si clickeas un poco antes, el mod retrasa el click hasta el momento ideal para que pases el obstáculo. También avisa o clickea por ti, con pendientes y orbs. En modo normal activa Safe Mode: el completado y el progreso no se guardan.",
+	"description": "Corrige tus clicks para practicar y analiza macros: cuenta las ventanas de frames (frame perfects) y a cuantos FPS corresponde cada una. En modo normal activa Safe Mode: el completado y el progreso no se guardan.",
 	"settings": {
 		"enabled": {
 			"type": "bool",
@@ -58,6 +58,20 @@
 			"default": 0,
 			"min": 0,
 			"max": 30
+		},
+		"macro-file": {
+			"type": "string",
+			"name": "Archivo de macro",
+			"description": "Nombre del archivo en la carpeta de macros del mod (JSON GDR o texto frame,1/0). Se analiza con el boton Macro FP del menu de pausa.",
+			"default": "macro.json"
+		},
+		"macro-fps": {
+			"type": "int",
+			"name": "FPS de la macro",
+			"description": "Solo se usa si el archivo no lo dice (los JSON GDR si lo dicen). Lo normal es 240.",
+			"default": 240,
+			"min": 1,
+			"max": 1000
 		}
 	}
 }
