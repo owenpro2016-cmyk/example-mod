@@ -1,0 +1,303 @@
+// Click Assist - Analizador de ventanas de frames (macro)
+// Lee una macro (JSON GDR o texto "frame,1/0"), mide los frames entre cada input
+// y los cuenta por ventana, con el FPS que corresponde a cada una.
+// Se abre desde el boton "Macro FP" del menu de pausa. Solo lee: no mueve ni clickea nada.
+
+#include <Geode/Geode.hpp>
+#include <Geode/modify/PauseLayer.hpp>
+#include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <vector>
+
+using namespace geode::prelude;
+
+// BEGIN CORE
+namespace macro {
+    struct Evt {
+        long long frame;
+        bool down;
+    };
+
+    struct Bucket {
+        char const* name;
+        int lo;
+        int hi;
+        int fps;
+        int count;
+    };
+
+    inline bool looksBinary(std::string const& s) {
+        size_t n = std::min<size_t>(s.size(), 256);
+        for (size_t i = 0; i < n; ++i) {
+            unsigned char c = static_cast<unsigned char>(s[i]);
+            if (c == 0 || (c < 9)) return true;
+        }
+        return false;
+    }
+
+    inline bool getNumber(std::string const& obj, char const* key, double& out) {
+        std::string k = std::string("\"") + key + "\"";
+        auto p = obj.find(k);
+        if (p == std::string::npos) return false;
+        p = obj.find(':', p + k.size());
+        if (p == std::string::npos) return false;
+        char const* start = obj.c_str() + p + 1;
+        char* end = nullptr;
+        double v = std::strtod(start, &end);
+        if (end == start) return false;
+        out = v;
+        return true;
+    }
+
+    inline bool getBool(std::string const& obj, char const* key, bool& out) {
+        std::string k = std::string("\"") + key + "\"";
+        auto p = obj.find(k);
+        if (p == std::string::npos) return false;
+        p = obj.find(':', p + k.size());
+        if (p == std::string::npos) return false;
+        p = obj.find_first_not_of(" \t\r\n", p + 1);
+        if (p == std::string::npos) return false;
+        if (obj.compare(p, 4, "true") == 0) { out = true; return true; }
+        if (obj.compare(p, 5, "false") == 0) { out = false; return true; }
+        return false;
+    }
+
+    // JSON tipo GDR: { "framerate": 240, "inputs": [ {"frame":12,"btn":1,"2p":false,"down":true}, ... ] }
+    inline bool parseJson(std::string const& s, std::vector<Evt>& out, double& fps) {
+        auto pos = s.find("\"inputs\"");
+        if (pos == std::string::npos) return false;
+        double fr = 0;
+        if (getNumber(s, "framerate", fr) && fr > 0) fps = fr;
+        size_t i = s.find('[', pos);
+        if (i == std::string::npos) return false;
+        ++i;
+        while (i < s.size()) {
+            size_t a = s.find('{', i);
+            if (a == std::string::npos) break;
+            size_t b = s.find('}', a);
+            if (b == std::string::npos) break;
+            std::string obj = s.substr(a, b - a + 1);
+            double frame = 0, btn = 1;
+            bool down = true, p2 = false;
+            if (getNumber(obj, "frame", frame) && getBool(obj, "down", down)) {
+                getNumber(obj, "btn", btn);
+                getBool(obj, "2p", p2);
+                if (!p2 && static_cast<int>(btn) == 1) {
+                    out.push_back({ static_cast<long long>(frame), down });
+                }
+            }
+            size_t c = s.find_first_not_of(" \t\r\n,", b + 1);
+            if (c == std::string::npos || s[c] == ']') break;
+            i = b + 1;
+        }
+        return !out.empty();
+    }
+
+    // Texto: una linea por input. Ejemplos: "120,1"  "123 0"  "200 down"  "fps=240"
+    inline bool parseText(std::string const& s, std::vector<Evt>& out, double& fps) {
+        std::istringstream in(s);
+        std::string line;
+        while (std::getline(in, line)) {
+            std::string low;
+            for (char c : line) low += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            auto f = low.find_first_not_of(" \t\r");
+            if (f == std::string::npos) continue;
+            if (low[f] == '#' || low.compare(f, 2, "//") == 0) continue;
+
+            std::vector<long long> nums;
+            for (size_t i = 0; i < low.size();) {
+                if (std::isdigit(static_cast<unsigned char>(low[i]))) {
+                    long long v = 0;
+                    size_t j = i;
+                    while (j < low.size() && std::isdigit(static_cast<unsigned char>(low[j]))) {
+                        v = v * 10 + (low[j] - '0');
+                        ++j;
+                    }
+                    nums.push_back(v);
+                    i = j;
+                } else {
+                    ++i;
+                }
+            }
+            if (nums.empty()) continue;
+
+            if (low.find("fps") != std::string::npos || low.find("tps") != std::string::npos) {
+                if (nums[0] > 0) fps = static_cast<double>(nums[0]);
+                continue;
+            }
+
+            bool hasDown = low.find("down") != std::string::npos || low.find("press") != std::string::npos
+                        || low.find("click") != std::string::npos || low.find("push") != std::string::npos;
+            bool hasUp = low.find("up") != std::string::npos || low.find("release") != std::string::npos;
+            bool down;
+            if (hasDown) down = true;
+            else if (hasUp) down = false;
+            else if (nums.size() >= 2) down = (nums.back() != 0);
+            else continue;
+            out.push_back({ nums[0], down });
+        }
+        return !out.empty();
+    }
+
+    struct Tight {
+        long long frame;
+        long long ticks;
+    };
+
+    struct Result {
+        long long inputs = 0;
+        long long gaps = 0;
+        long long over = 0;          // ventanas de 11 ticks o mas
+        long long minTicks = 0;
+        std::vector<Tight> tight;    // ventanas de 4 ticks o menos
+        Bucket b[7] = {
+            { "1",    1,  1, 240, 0 },
+            { "2",    2,  2, 120, 0 },
+            { "3",    3,  3,  80, 0 },
+            { "4",    4,  4,  60, 0 },
+            { "5-6",  5,  6,  40, 0 },
+            { "7-8",  7,  8,  30, 0 },
+            { "9-10", 9, 10,  24, 0 },
+        };
+    };
+
+    // La tabla esta en "ticks" de 240 por segundo (1 tick = 1 frame a 240 FPS)
+    inline Result analyze(std::vector<Evt>& ev, double fps) {
+        Result r;
+        r.inputs = static_cast<long long>(ev.size());
+        std::stable_sort(ev.begin(), ev.end(),
+            [](Evt const& a, Evt const& b) { return a.frame < b.frame; });
+        double toTicks = 240.0 / fps;
+        r.minTicks = 1000000;
+        for (size_t i = 1; i < ev.size(); ++i) {
+            long long df = ev[i].frame - ev[i - 1].frame;
+            if (df <= 0) continue;
+            long long t = std::llround(static_cast<double>(df) * toTicks);
+            if (t < 1) t = 1;
+            ++r.gaps;
+            r.minTicks = std::min(r.minTicks, t);
+            bool placed = false;
+            for (auto& bk : r.b) {
+                if (t >= bk.lo && t <= bk.hi) { ++bk.count; placed = true; break; }
+            }
+            if (!placed) ++r.over;
+            if (t <= 4) r.tight.push_back({ ev[i - 1].frame, t });
+        }
+        if (r.gaps == 0) r.minTicks = 0;
+        return r;
+    }
+
+    inline int fpsForTicks(long long t) {
+        switch (t) {
+            case 1: return 240;
+            case 2: return 120;
+            case 3: return 80;
+            case 4: return 60;
+            case 5: case 6: return 40;
+            case 7: case 8: return 30;
+            case 9: case 10: return 24;
+            default: return 0;
+        }
+    }
+}
+// END CORE
+
+namespace {
+    // Lee el archivo, lo analiza y devuelve el texto para mostrar
+    std::string buildReport() {
+        auto dir = Mod::get()->getSaveDir() / "macros";
+        std::error_code ec;
+        std::filesystem::create_directories(dir, ec);
+
+        std::string name = Mod::get()->getSettingValue<std::string>("macro-file");
+        auto path = dir / name;
+
+        std::ifstream f(path, std::ios::binary);
+        if (!f) {
+            return "No encuentro la macro:\n" + path.string() +
+                   "\n\nCopia tu archivo a esta carpeta:\n" + dir.string() +
+                   "\ny pon su nombre en los ajustes del mod (Archivo de macro).";
+        }
+        std::stringstream ss;
+        ss << f.rdbuf();
+        std::string data = ss.str();
+
+        if (macro::looksBinary(data)) {
+            return "Ese archivo es binario (por ejemplo un .gdr de xdBot) y todavia no lo se leer.\n"
+                   "Exportalo como JSON o como texto (una linea por input: frame,1 o frame,0).";
+        }
+
+        double fps = static_cast<double>(Mod::get()->getSettingValue<int64_t>("macro-fps"));
+        std::vector<macro::Evt> ev;
+        bool ok = macro::parseJson(data, ev, fps);
+        if (!ok) {
+            ev.clear();
+            ok = macro::parseText(data, ev, fps);
+        }
+        if (!ok || ev.size() < 2) {
+            return "No pude leer inputs de:\n" + path.string() +
+                   "\n\nFormatos: JSON GDR (con \"inputs\") o texto, una linea por input: frame,1 o frame,0";
+        }
+        if (fps < 1.0) fps = 240.0;
+
+        auto r = macro::analyze(ev, fps);
+
+        std::ostringstream o;
+        o << "Macro: " << name << "  (" << static_cast<int>(fps) << " fps)\n";
+        o << "Inputs: " << r.inputs << "   Ventanas: " << r.gaps << "\n\n";
+        o << "Ventana (ticks de 240) = FPS necesarios\n";
+        for (auto const& b : r.b) {
+            o << b.name << " = " << b.fps << "fps :  " << b.count << "\n";
+        }
+        o << "11 o mas (menos de 24fps) :  " << r.over << "\n\n";
+
+        o << "Frame perfects (ventana de 1): " << r.b[0].count << "\n";
+        if (r.gaps > 0 && macro::fpsForTicks(r.minTicks) > 0) {
+            o << "Ventana mas justa: " << r.minTicks << " = " << macro::fpsForTicks(r.minTicks) << "fps\n";
+        }
+
+        // Lista completa en un archivo
+        auto outPath = dir / "results.txt";
+        std::ofstream out(outPath);
+        if (out) {
+            out << "frame,ticks,fps\n";
+            size_t n = 0;
+            for (auto const& t : r.tight) {
+                out << t.frame << "," << t.ticks << "," << macro::fpsForTicks(t.ticks) << "\n";
+                if (++n >= 5000) break;
+            }
+            o << "\nLista de ventanas de 4 o menos en:\n" << outPath.string();
+        }
+        return o.str();
+    }
+}
+
+class $modify(MacroPause, PauseLayer) {
+public:
+    void customSetup() {
+        PauseLayer::customSetup();
+
+        auto win = CCDirector::get()->getWinSize();
+        auto menu = CCMenu::create();
+        menu->setPosition({ win.width - 55.f, 28.f });
+
+        auto spr = ButtonSprite::create("Macro FP");
+        spr->setScale(0.6f);
+        auto btn = CCMenuItemSpriteExtra::create(spr, this, menu_selector(MacroPause::onMacroFP));
+        menu->addChild(btn);
+        this->addChild(menu, 20);
+    }
+
+    void onMacroFP(CCObject*) {
+        std::string text = buildReport();
+        FLAlertLayer::create(nullptr, "Ventanas de frames", text, "OK", nullptr, 400.f, true, 300.f, 0.8f)->show();
+    }
+};
+
+// FIN DE macro.cpp
