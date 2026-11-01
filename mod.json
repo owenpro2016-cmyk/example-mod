@@ -1,77 +1,33 @@
-{
-	"geode": "5.11.2",
-	"gd": {
-		"win": "2.2081",
-		"android": "2.2081",
-		"mac": "2.2081",
-		"ios": "2.2081"
-	},
-	"version": "v1.5.0",
-	"id": "owenpro2016-cmyk.click-assist",
-	"name": "Click Assist",
-	"developer": "owenpro2016-cmyk",
-	"description": "Corrige tus clicks para practicar y analiza macros: cuenta las ventanas de frames (frame perfects) y a cuantos FPS corresponde cada una. En modo normal activa Safe Mode: el completado y el progreso no se guardan.",
-	"settings": {
-		"enabled": {
-			"type": "bool",
-			"name": "Activar",
-			"description": "En práctica funciona normal. En modo normal el Safe Mode es obligatorio: no se guarda completado ni progreso mientras esté activo.",
-			"default": true
-		},
-		"mode": {
-			"type": "string",
-			"name": "Modo",
-			"description": "Corregir = solo corrige tus clicks. Aviso = además muestra CLICK! / HOLD / RELEASE. Auto = el mod clickea por ti.",
-			"default": "Corregir",
-			"one-of": [
-				"Corregir",
-				"Aviso",
-				"Auto"
-			]
-		},
-		"early": {
-			"type": "int",
-			"name": "Retrasar clicks tempranos (frames)",
-			"description": "Si clickeas hasta este número de frames ANTES del momento ideal, el mod retrasa tu click hasta ese momento para que pases el obstáculo (a 60 FPS). 0 = apagado.",
-			"default": 6,
-			"min": 0,
-			"max": 30
-		},
-		"correction": {
-			"type": "float",
-			"name": "Adelanto del momento ideal (ms)",
-			"description": "Adelanta el momento ideal y el aviso. Útil en móvil si notas lag al tocar (prueba 0 a 80).",
-			"default": 0,
-			"min": 0,
-			"max": 300
-		},
-		"orbs": {
-			"type": "bool",
-			"name": "Detectar orbs",
-			"description": "Hace/avisa el click al tocar un orb. Los pads no se manejan.",
-			"default": true
-		},
-		"window": {
-			"type": "int",
-			"name": "Rebobinar clicks tardíos (frames)",
-			"description": "Opcional. Si clickeas hasta este número de frames DESPUÉS del momento ideal, el mod te devuelve a ese momento y aplica el click ahí. 0 = apagado.",
-			"default": 0,
-			"min": 0,
-			"max": 30
-		},
-		"macro-file": {
-			"type": "string",
-			"name": "Archivo de macro",
-			"description": "Nombre del archivo en la carpeta de macros del mod (JSON GDR o texto frame,1/0). Se analiza con el boton Macro FP del menu de pausa.",
-			"default": "macro.json"
-		},
-		"macro-fps": {
-			"type": "int",
-			"name": "FPS de la macro",
-			"description": "Solo se usa si el archivo no lo dice (los JSON GDR si lo dicen). Lo normal es 240.",
-			"default": 240,
-			"min": 1,
-			"max": 1000
-		}
-	}
+geode": "4.6.1",
+"gd": { "android": "2.2074" },
+"id": "tu-usuario.inputassist",
+"name": "InputAssist",
+"version": "v1.0.0",
+"developer": "tu-usuario",
+"description": "Asistencia de entrada pensada para movil: clicks alineados al frame, retencion de clicks tempranos, wave recta y vuelo estable. Todo dentro del tick de fisica, sin hilos ni timers.",
+"repository": "https://github.com/tu-usuario/InputAssist",
+"platforms": ["android32", "android64"],
+"settings": {
+"enabled": { "type": "bool", "default": true, "name": "Activar InputAssist", "description": "Interruptor general. Apagado = comportamiento original." },
+"profile": { "type": "string", "default": "balanced", "one-of": ["off","soft","balanced","aggressive","custom"], "name": "Perfil", "description": "off / soft / balanced / aggressive / custom." },
+"alignMode": { "type": "string", "default": "aligned", "one-of": ["off","aligned","offset"], "name": "Alineacion de clicks", "description": "off = passthrough. aligned = siguiente tick. offset = + desfase." },
+"alignOffset": { "type": "int", "default": 0, "min": -3, "max": 3, "control": { "type": "slider" }, "name": "Desfase (frames)", "description": "Frames extra de retraso. Valores negativos se convierten a 0." },
+"retainEnabled": { "type": "bool", "default": true, "name": "Retener clicks tempranos" },
+"retainWindowMs": { "type": "int", "default": 120, "min": 20, "max": 300, "control": { "type": "slider" }, "name": "Ventana retencion (ms)" },
+"retainWindowFrames": { "type": "int", "default": 8, "min": 1, "max": 30, "control": { "type": "slider" }, "name": "Ventana retencion (frames)" },
+"adaptiveEnabled": { "type": "bool", "default": false, "name": "Modo adaptativo" },
+"adaptiveWindow": { "type": "int", "default": 45, "min": 20, "max": 80, "control": { "type": "slider" }, "name": "Ventana adaptativa (clicks)" },
+"adaptiveMaxStep": { "type": "float", "default": 0.08,"min": 0.01, "max": 0.5, "control": { "type": "slider" }, "name": "Paso maximo adaptativo" },
+"waveEnabled": { "type": "bool", "default": true, "name": "Wave recta" },
+"wavePulseTicks": { "type": "int", "default": 2, "min": 1, "max": 4, "control": { "type": "slider" }, "name": "Duracion de micro-pulso (ticks)" },
+"flightEnabled": { "type": "bool", "default": true, "name": "Vuelo estable (ship/UFO)" },
+"flightDamping": { "type": "float", "default": 0.55,"min": 0.1, "max": 0.9, "control": { "type": "slider" }, "name": "Amortiguacion de vuelo" },
+"flightMaxCorrections": { "type": "int","default": 8, "min": 2, "max": 30, "control": { "type": "slider" }, "name": "Correcciones maximas por segundo" },
+"obstacleRadius": { "type": "int", "default": 3, "min": 1, "max": 5, "control": { "type": "slider" }, "name": "Radio de analisis (bloques)" },
+"showIndicator": { "type": "bool", "default": true, "name": "Mostrar indicador en pantalla" },
+"indicatorX": { "type": "float", "default": 0.9, "min": 0.0, "max": 1.0, "control": { "type": "slider" }, "name": "Indicador X (0-1)" },
+"indicatorY": { "type": "float", "default": 0.15,"min": 0.0, "max": 1.0, "control": { "type": "slider" }, "name": "Indicador Y (0-1)" },
+"perLevelProfiles": { "type": "bool", "default": false, "name": "Guardar ajustes por nivel" }
 }
+}
+FIN
